@@ -214,6 +214,30 @@ export function TimeRegistration() {
 
     Object.entries(dataByMonth).forEach(([month, data]) => {
       const ws = XLSX.utils.json_to_sheet(data);
+      
+      // Style headers with bold and light blue background
+      const headers = ['A1', 'B1', 'C1', 'D1', 'E1', 'F1', 'G1'];
+      headers.forEach(cell => {
+        if (ws[cell]) {
+          ws[cell].s = {
+            font: { bold: true, color: { rgb: "FFFFFF" } },
+            fill: { fgColor: { rgb: "4A90D9" } },
+            alignment: { horizontal: "center" }
+          };
+        }
+      });
+
+      // Set column widths
+      ws['!cols'] = [
+        { wch: 15 }, // CÉDULA
+        { wch: 30 }, // NOMBRE
+        { wch: 20 }, // ÁREA
+        { wch: 10 }, // TIPO
+        { wch: 22 }, // HORA
+        { wch: 35 }, // OBJETOS PERSONALES
+        { wch: 25 }  // TAREA
+      ];
+
       XLSX.utils.book_append_sheet(wb, ws, month);
     });
 
