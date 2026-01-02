@@ -3,6 +3,7 @@ import { LoginScreen } from '@/components/LoginScreen';
 import { TimeRegistration } from '@/components/TimeRegistration';
 import { EmployeeRegistration } from '@/components/EmployeeRegistration';
 import { ShoppingCart } from 'lucide-react';
+import mascotaAlkosto from '@/assets/mascota-alkosto.png';
 
 const Index = () => {
   const [isLoggedIn, setIsLoggedIn] = useState(false);
@@ -28,12 +29,19 @@ const Index = () => {
     <div className="min-h-screen p-4 md:p-6">
       <div className="max-w-7xl mx-auto">
         <div className="bg-card rounded-2xl shadow-elevated p-6 md:p-8 animate-fade-in">
-          {/* Logo */}
-          <div className="flex justify-center mb-6">
-            <div className="w-48 h-auto p-2 bg-card rounded-xl shadow-card overflow-hidden">
+          {/* Logo y Mascota */}
+          <div className="flex justify-center items-center gap-6 mb-6">
+            <div className="w-40 h-auto p-2 bg-card rounded-xl shadow-card overflow-hidden">
               <img 
                 src="https://co.tubono.com/wp-content/uploads/sites/17/2023/12/ktronix-alkosto.png" 
                 alt="Alkosto Logo"
+                className="w-full h-auto object-contain"
+              />
+            </div>
+            <div className="w-32 h-auto">
+              <img 
+                src={mascotaAlkosto}
+                alt="Mascota Alkosto"
                 className="w-full h-auto object-contain"
               />
             </div>
