@@ -26,7 +26,7 @@ const Index = () => {
           {/* Logo y Mascota */}
           <div className="flex justify-center items-center gap-6 mb-6">
             <div className="w-40 h-auto p-2 bg-card rounded-xl shadow-card overflow-hidden">
-              <img src="https://co.tubono.com/wp-content/uploads/sites/17/2023/12/ktronix-alkosto.png" alt="Alkosto Logo" className="w-full h-auto object-contain" />
+              <img src="https://co.tubono.com/wp-content/uploads/sites/17/2023/12/ktronix-alkosto.png" alt="Alkosto Logo" className="w-full h-auto object-contain border-2 border-solid rounded-xl shadow-2xl opacity-95 border-accent" />
             </div>
             <div className="w-32 h-auto">
               
