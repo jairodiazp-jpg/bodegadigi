@@ -1,11 +1,86 @@
-// Update this page (the content is just a fallback if you fail to update the page)
+import { useState, useEffect } from 'react';
+import { LoginScreen } from '@/components/LoginScreen';
+import { TimeRegistration } from '@/components/TimeRegistration';
+import { EmployeeRegistration } from '@/components/EmployeeRegistration';
+import { ShoppingCart } from 'lucide-react';
 
 const Index = () => {
+  const [isLoggedIn, setIsLoggedIn] = useState(false);
+  const [activeTab, setActiveTab] = useState<'registro-horas' | 'registro-empleados'>('registro-horas');
+
+  useEffect(() => {
+    const session = localStorage.getItem('bodega-session');
+    if (session === 'active') {
+      setIsLoggedIn(true);
+    }
+  }, []);
+
+  const handleLogin = () => {
+    localStorage.setItem('bodega-session', 'active');
+    setIsLoggedIn(true);
+  };
+
+  if (!isLoggedIn) {
+    return <LoginScreen onLogin={handleLogin} />;
+  }
+
   return (
-    <div className="flex min-h-screen items-center justify-center bg-background">
-      <div className="text-center">
-        <h1 className="mb-4 text-4xl font-bold">Welcome to Your Blank App</h1>
-        <p className="text-xl text-muted-foreground">Start building your amazing project here!</p>
+    <div className="min-h-screen p-4 md:p-6">
+      <div className="max-w-7xl mx-auto">
+        <div className="bg-card rounded-2xl shadow-elevated p-6 md:p-8 animate-fade-in">
+          {/* Logo */}
+          <div className="flex justify-center mb-6">
+            <div className="w-48 h-auto p-2 bg-card rounded-xl shadow-card overflow-hidden">
+              <img 
+                src="https://co.tubono.com/wp-content/uploads/sites/17/2023/12/ktronix-alkosto.png" 
+                alt="Alkosto Logo"
+                className="w-full h-auto object-contain"
+              />
+            </div>
+          </div>
+
+          {/* Header */}
+          <div className="text-center mb-8">
+            <div className="flex items-center justify-center gap-3 mb-2">
+              <ShoppingCart className="w-7 h-7 text-accent animate-bounce-subtle" />
+              <h1 className="text-2xl md:text-3xl font-bold text-primary">
+                REGISTRO EMPLEADOS A BODEGA DIGITAL
+              </h1>
+              <ShoppingCart className="w-7 h-7 text-accent animate-bounce-subtle" />
+            </div>
+          </div>
+
+          {/* Tabs */}
+          <div className="flex gap-1 mb-8 border-b border-border">
+            <button
+              onClick={() => setActiveTab('registro-horas')}
+              className={`px-6 py-3 font-semibold transition-all rounded-t-lg ${
+                activeTab === 'registro-horas'
+                  ? 'gradient-primary text-primary-foreground'
+                  : 'text-muted-foreground hover:text-card-foreground hover:bg-muted/50'
+              }`}
+            >
+              REGISTRO DE HORAS
+            </button>
+            <button
+              onClick={() => setActiveTab('registro-empleados')}
+              className={`px-6 py-3 font-semibold transition-all rounded-t-lg ${
+                activeTab === 'registro-empleados'
+                  ? 'gradient-primary text-primary-foreground'
+                  : 'text-muted-foreground hover:text-card-foreground hover:bg-muted/50'
+              }`}
+            >
+              REGISTRO DE EMPLEADOS
+            </button>
+          </div>
+
+          {/* Content */}
+          {activeTab === 'registro-horas' ? (
+            <TimeRegistration />
+          ) : (
+            <EmployeeRegistration />
+          )}
+        </div>
       </div>
     </div>
   );
