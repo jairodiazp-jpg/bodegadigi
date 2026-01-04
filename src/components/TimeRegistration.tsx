@@ -212,12 +212,9 @@ export function TimeRegistration() {
 
     const wb = XLSX.utils.book_new();
 
-    Object.entries(dataByMonth).forEach(([month, data]) => {
-      const ws = XLSX.utils.json_to_sheet(data);
-      
-      // Style headers with bold and light blue background
-      const headers = ['A1', 'B1', 'C1', 'D1', 'E1', 'F1', 'G1'];
-      headers.forEach(cell => {
+    // Helper function to apply header styles
+    const applyHeaderStyles = (ws: XLSX.WorkSheet, headerCells: string[]) => {
+      headerCells.forEach(cell => {
         if (ws[cell]) {
           ws[cell].s = {
             font: { bold: true, color: { rgb: "FFFFFF" } },
@@ -226,8 +223,14 @@ export function TimeRegistration() {
           };
         }
       });
+    };
 
-      // Set column widths
+    // Add monthly data sheets
+    Object.entries(dataByMonth).forEach(([month, data]) => {
+      const ws = XLSX.utils.json_to_sheet(data);
+      
+      applyHeaderStyles(ws, ['A1', 'B1', 'C1', 'D1', 'E1', 'F1', 'G1']);
+
       ws['!cols'] = [
         { wch: 15 }, // CÉDULA
         { wch: 30 }, // NOMBRE
@@ -240,6 +243,197 @@ export function TimeRegistration() {
 
       XLSX.utils.book_append_sheet(wb, ws, month);
     });
+
+    // Generate Report Sheet with statistics
+    const employeeStats: Record<string, { 
+      cedula: string; 
+      nombre: string; 
+      area: string; 
+      entradas: number; 
+      salidas: number; 
+      totalMovimientos: number;
+      fechas: string[];
+    }> = {};
+
+    records.forEach((record: any) => {
+      const cedula = record.employees?.cedula || 'N/A';
+      const nombre = record.employees?.nombre || 'N/A';
+      const area = record.employees?.area || 'N/A';
+      const fecha = new Date(record.hora_registro).toLocaleDateString('es-CO');
+
+      if (!employeeStats[cedula]) {
+        employeeStats[cedula] = {
+          cedula,
+          nombre,
+          area,
+          entradas: 0,
+          salidas: 0,
+          totalMovimientos: 0,
+          fechas: []
+        };
+      }
+
+      if (record.tipo === 'ENTRADA') {
+        employeeStats[cedula].entradas++;
+      } else {
+        employeeStats[cedula].salidas++;
+      }
+      employeeStats[cedula].totalMovimientos++;
+      
+      if (!employeeStats[cedula].fechas.includes(fecha)) {
+        employeeStats[cedula].fechas.push(fecha);
+      }
+    });
+
+    // Create report data sorted by total movements (descending)
+    const reportData = Object.values(employeeStats)
+      .sort((a, b) => b.totalMovimientos - a.totalMovimientos)
+      .map(emp => ({
+        'CÉDULA': emp.cedula,
+        'NOMBRE': emp.nombre,
+        'ÁREA': emp.area,
+        'TOTAL ENTRADAS': emp.entradas,
+        'TOTAL SALIDAS': emp.salidas,
+        'TOTAL MOVIMIENTOS': emp.totalMovimientos,
+        'DÍAS CON REGISTRO': emp.fechas.length,
+        'PROMEDIO POR DÍA': emp.fechas.length > 0 ? (emp.totalMovimientos / emp.fechas.length).toFixed(1) : '0'
+      }));
+
+    // Create report sheet
+    const wsReport = XLSX.utils.aoa_to_sheet([]);
+    
+    // Title
+    XLSX.utils.sheet_add_aoa(wsReport, [['REPORTE DE MOVIMIENTOS - BODEGA DIGITAL']], { origin: 'A1' });
+    wsReport['A1'].s = { 
+      font: { bold: true, sz: 16, color: { rgb: "FFFFFF" } }, 
+      fill: { fgColor: { rgb: "2E5A7C" } },
+      alignment: { horizontal: "center" }
+    };
+    wsReport['!merges'] = [{ s: { r: 0, c: 0 }, e: { r: 0, c: 7 } }];
+
+    // Summary section
+    const totalEmpleados = Object.keys(employeeStats).length;
+    const totalEntradas = Object.values(employeeStats).reduce((sum, emp) => sum + emp.entradas, 0);
+    const totalSalidas = Object.values(employeeStats).reduce((sum, emp) => sum + emp.salidas, 0);
+    const empleadosMultiples = Object.values(employeeStats).filter(emp => emp.totalMovimientos > 2);
+
+    XLSX.utils.sheet_add_aoa(wsReport, [
+      [''],
+      ['RESUMEN GENERAL'],
+      ['Total Empleados Registrados:', totalEmpleados, '', 'Total Entradas:', totalEntradas],
+      ['Total Salidas:', totalSalidas, '', 'Empleados con múltiples movimientos:', empleadosMultiples.length],
+      ['']
+    ], { origin: 'A2' });
+
+    // Style summary headers
+    ['A3', 'A4', 'A5', 'D4', 'D5'].forEach(cell => {
+      if (wsReport[cell]) {
+        wsReport[cell].s = { font: { bold: true, color: { rgb: "2E5A7C" } } };
+      }
+    });
+
+    // Employees with multiple movements section
+    XLSX.utils.sheet_add_aoa(wsReport, [
+      ['EMPLEADOS CON MÚLTIPLES ENTRADAS/SALIDAS (Más de 2 movimientos)']
+    ], { origin: 'A7' });
+    wsReport['A7'].s = { 
+      font: { bold: true, sz: 12, color: { rgb: "FFFFFF" } }, 
+      fill: { fgColor: { rgb: "E67E22" } }
+    };
+
+    // Add report data starting at row 9
+    if (reportData.length > 0) {
+      XLSX.utils.sheet_add_json(wsReport, reportData, { origin: 'A9' });
+      
+      // Style data headers
+      applyHeaderStyles(wsReport, ['A9', 'B9', 'C9', 'D9', 'E9', 'F9', 'G9', 'H9']);
+    }
+
+    // Visual chart representation using ASCII-style bars
+    const chartStartRow = 10 + reportData.length + 2;
+    XLSX.utils.sheet_add_aoa(wsReport, [
+      [''],
+      ['GRÁFICA DE MOVIMIENTOS POR EMPLEADO']
+    ], { origin: `A${chartStartRow}` });
+    wsReport[`A${chartStartRow + 1}`].s = { 
+      font: { bold: true, sz: 12, color: { rgb: "FFFFFF" } }, 
+      fill: { fgColor: { rgb: "27AE60" } }
+    };
+
+    // Create bar chart representation
+    const maxMovimientos = Math.max(...Object.values(employeeStats).map(e => e.totalMovimientos));
+    const chartData = Object.values(employeeStats)
+      .sort((a, b) => b.totalMovimientos - a.totalMovimientos)
+      .slice(0, 10) // Top 10
+      .map(emp => {
+        const barLength = Math.round((emp.totalMovimientos / maxMovimientos) * 20);
+        const entradaBar = '█'.repeat(Math.round((emp.entradas / maxMovimientos) * 20));
+        const salidaBar = '▒'.repeat(Math.round((emp.salidas / maxMovimientos) * 20));
+        return [
+          emp.nombre.substring(0, 20),
+          entradaBar,
+          `(${emp.entradas} entradas)`,
+          salidaBar,
+          `(${emp.salidas} salidas)`,
+          `Total: ${emp.totalMovimientos}`
+        ];
+      });
+
+    XLSX.utils.sheet_add_aoa(wsReport, [
+      ['NOMBRE', 'ENTRADAS', '', 'SALIDAS', '', 'TOTAL']
+    ], { origin: `A${chartStartRow + 3}` });
+    applyHeaderStyles(wsReport, [
+      `A${chartStartRow + 3}`, `B${chartStartRow + 3}`, `C${chartStartRow + 3}`,
+      `D${chartStartRow + 3}`, `E${chartStartRow + 3}`, `F${chartStartRow + 3}`
+    ]);
+
+    XLSX.utils.sheet_add_aoa(wsReport, chartData, { origin: `A${chartStartRow + 4}` });
+
+    // Area summary
+    const areaStats: Record<string, { entradas: number; salidas: number }> = {};
+    records.forEach((record: any) => {
+      const area = record.employees?.area || 'N/A';
+      if (!areaStats[area]) {
+        areaStats[area] = { entradas: 0, salidas: 0 };
+      }
+      if (record.tipo === 'ENTRADA') {
+        areaStats[area].entradas++;
+      } else {
+        areaStats[area].salidas++;
+      }
+    });
+
+    const areaSummaryRow = chartStartRow + 5 + chartData.length + 2;
+    XLSX.utils.sheet_add_aoa(wsReport, [
+      [''],
+      ['RESUMEN POR ÁREA']
+    ], { origin: `A${areaSummaryRow}` });
+    wsReport[`A${areaSummaryRow + 1}`].s = { 
+      font: { bold: true, sz: 12, color: { rgb: "FFFFFF" } }, 
+      fill: { fgColor: { rgb: "9B59B6" } }
+    };
+
+    const areaData = Object.entries(areaStats).map(([area, stats]) => ({
+      'ÁREA': area,
+      'ENTRADAS': stats.entradas,
+      'SALIDAS': stats.salidas,
+      'TOTAL': stats.entradas + stats.salidas,
+      'GRÁFICA': '█'.repeat(Math.min(Math.round((stats.entradas + stats.salidas) / 2), 30))
+    }));
+
+    XLSX.utils.sheet_add_json(wsReport, areaData, { origin: `A${areaSummaryRow + 3}` });
+    applyHeaderStyles(wsReport, [
+      `A${areaSummaryRow + 3}`, `B${areaSummaryRow + 3}`, `C${areaSummaryRow + 3}`,
+      `D${areaSummaryRow + 3}`, `E${areaSummaryRow + 3}`
+    ]);
+
+    // Set column widths for report
+    wsReport['!cols'] = [
+      { wch: 25 }, { wch: 22 }, { wch: 15 }, { wch: 22 }, { wch: 15 }, 
+      { wch: 18 }, { wch: 18 }, { wch: 15 }
+    ];
+
+    XLSX.utils.book_append_sheet(wb, wsReport, 'REPORTE');
 
     XLSX.writeFile(wb, 'registros_empleados.xlsx');
 
