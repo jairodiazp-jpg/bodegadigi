@@ -2,11 +2,12 @@ import { useState, useEffect } from 'react';
 import { LoginScreen } from '@/components/LoginScreen';
 import { TimeRegistration } from '@/components/TimeRegistration';
 import { EmployeeRegistration } from '@/components/EmployeeRegistration';
-import { ShoppingCart } from 'lucide-react';
+import { MetricsPanel } from '@/components/MetricsPanel';
+import { ShoppingCart, BarChart3 } from 'lucide-react';
 import mascotaAlkosto from '@/assets/mascota-alkosto.png';
 const Index = () => {
   const [isLoggedIn, setIsLoggedIn] = useState(false);
-  const [activeTab, setActiveTab] = useState<'registro-horas' | 'registro-empleados'>('registro-horas');
+  const [activeTab, setActiveTab] = useState<'registro-horas' | 'registro-empleados' | 'metricas'>('registro-horas');
   useEffect(() => {
     const session = localStorage.getItem('bodega-session');
     if (session === 'active') {
@@ -45,17 +46,23 @@ const Index = () => {
           </div>
 
           {/* Tabs */}
-          <div className="flex gap-1 mb-8 border-b border-border">
+          <div className="flex flex-wrap gap-1 mb-8 border-b border-border">
             <button onClick={() => setActiveTab('registro-horas')} className={`px-6 py-3 font-semibold transition-all rounded-t-lg ${activeTab === 'registro-horas' ? 'gradient-primary text-primary-foreground' : 'text-muted-foreground hover:text-card-foreground hover:bg-muted/50'}`}>
               REGISTRO DE HORAS
             </button>
             <button onClick={() => setActiveTab('registro-empleados')} className={`px-6 py-3 font-semibold transition-all rounded-t-lg ${activeTab === 'registro-empleados' ? 'gradient-primary text-primary-foreground' : 'text-muted-foreground hover:text-card-foreground hover:bg-muted/50'}`}>
               REGISTRO DE EMPLEADOS
             </button>
+            <button onClick={() => setActiveTab('metricas')} className={`px-6 py-3 font-semibold transition-all rounded-t-lg flex items-center gap-2 ${activeTab === 'metricas' ? 'gradient-primary text-primary-foreground' : 'text-muted-foreground hover:text-card-foreground hover:bg-muted/50'}`}>
+              <BarChart3 className="w-4 h-4" />
+              MÉTRICAS
+            </button>
           </div>
 
           {/* Content */}
-          {activeTab === 'registro-horas' ? <TimeRegistration /> : <EmployeeRegistration />}
+          {activeTab === 'registro-horas' && <TimeRegistration />}
+          {activeTab === 'registro-empleados' && <EmployeeRegistration />}
+          {activeTab === 'metricas' && <MetricsPanel />}
         </div>
       </div>
     </div>;
