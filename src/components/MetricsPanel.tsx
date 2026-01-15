@@ -6,7 +6,20 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { useEmployees } from '@/hooks/useEmployees';
 import { useToast } from '@/hooks/use-toast';
-import { Lock, BarChart3, TrendingUp, TrendingDown, Users, ArrowUpDown, Eye, EyeOff } from 'lucide-react';
+import { supabase } from '@/integrations/supabase/client';
+import { Lock, BarChart3, TrendingUp, TrendingDown, Users, ArrowUpDown, Eye, EyeOff, FileSpreadsheet, Trash2, Calendar } from 'lucide-react';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
+import * as XLSX from 'xlsx';
 
 interface EmployeeMetric {
   cedula: string;
@@ -18,13 +31,30 @@ interface EmployeeMetric {
   ultimoMovimiento: string;
 }
 
+interface TimeRecord {
+  id: string;
+  tipo: string;
+  hora_registro: string;
+  tarea: string | null;
+  objetos_personales: string[] | null;
+  employees: {
+    cedula: string;
+    nombre: string;
+    area: string;
+  } | null;
+}
+
 export function MetricsPanel() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [metrics, setMetrics] = useState<EmployeeMetric[]>([]);
+  const [allRecords, setAllRecords] = useState<TimeRecord[]>([]);
   const [sortBy, setSortBy] = useState<'entradas' | 'salidas' | 'total'>('total');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
+  const [startDate, setStartDate] = useState('');
+  const [endDate, setEndDate] = useState('');
+  const [isDeleting, setIsDeleting] = useState(false);
   
   const { employees, getRecordsForExport, loading } = useEmployees();
   const { toast } = useToast();
@@ -62,9 +92,14 @@ export function MetricsPanel() {
     const records = await getRecordsForExport();
     if (!records) return;
 
+    setAllRecords(records as TimeRecord[]);
+    calculateMetrics(records as TimeRecord[]);
+  };
+
+  const calculateMetrics = (records: TimeRecord[]) => {
     const employeeStats: Record<string, EmployeeMetric> = {};
 
-    records.forEach((record: any) => {
+    records.forEach((record) => {
       const cedula = record.employees?.cedula || 'N/A';
       const nombre = record.employees?.nombre || 'N/A';
       const area = record.employees?.area || 'N/A';
@@ -88,7 +123,6 @@ export function MetricsPanel() {
       }
       employeeStats[cedula].totalMovimientos++;
 
-      // Update last movement if this is more recent
       if (new Date(record.hora_registro) > new Date(employeeStats[cedula].ultimoMovimiento)) {
         employeeStats[cedula].ultimoMovimiento = record.hora_registro;
       }
@@ -97,7 +131,145 @@ export function MetricsPanel() {
     setMetrics(Object.values(employeeStats));
   };
 
-  const sortedMetrics = [...metrics].sort((a, b) => {
+  const getFilteredRecords = () => {
+    if (!startDate && !endDate) return allRecords;
+    
+    return allRecords.filter(record => {
+      const recordDate = new Date(record.hora_registro);
+      const start = startDate ? new Date(startDate + 'T00:00:00') : null;
+      const end = endDate ? new Date(endDate + 'T23:59:59') : null;
+      
+      if (start && end) return recordDate >= start && recordDate <= end;
+      if (start) return recordDate >= start;
+      if (end) return recordDate <= end;
+      return true;
+    });
+  };
+
+  const filteredRecords = getFilteredRecords();
+
+  const getFilteredMetrics = () => {
+    const employeeStats: Record<string, EmployeeMetric> = {};
+
+    filteredRecords.forEach((record) => {
+      const cedula = record.employees?.cedula || 'N/A';
+      const nombre = record.employees?.nombre || 'N/A';
+      const area = record.employees?.area || 'N/A';
+
+      if (!employeeStats[cedula]) {
+        employeeStats[cedula] = {
+          cedula,
+          nombre,
+          area,
+          entradas: 0,
+          salidas: 0,
+          totalMovimientos: 0,
+          ultimoMovimiento: record.hora_registro
+        };
+      }
+
+      if (record.tipo === 'ENTRADA') {
+        employeeStats[cedula].entradas++;
+      } else {
+        employeeStats[cedula].salidas++;
+      }
+      employeeStats[cedula].totalMovimientos++;
+
+      if (new Date(record.hora_registro) > new Date(employeeStats[cedula].ultimoMovimiento)) {
+        employeeStats[cedula].ultimoMovimiento = record.hora_registro;
+      }
+    });
+
+    return Object.values(employeeStats);
+  };
+
+  const displayMetrics = (startDate || endDate) ? getFilteredMetrics() : metrics;
+
+  const handleDeleteMetrics = async () => {
+    setIsDeleting(true);
+    try {
+      const { error } = await supabase
+        .from('time_records')
+        .delete()
+        .neq('id', '00000000-0000-0000-0000-000000000000'); // Delete all records
+
+      if (error) throw error;
+
+      toast({
+        title: "Métricas eliminadas",
+        description: "Todos los registros de tiempo han sido eliminados"
+      });
+      
+      setMetrics([]);
+      setAllRecords([]);
+    } catch (error) {
+      console.error('Error deleting metrics:', error);
+      toast({
+        title: "Error",
+        description: "No se pudieron eliminar las métricas",
+        variant: "destructive"
+      });
+    } finally {
+      setIsDeleting(false);
+    }
+  };
+
+  const handleExportExcel = () => {
+    const recordsToExport = filteredRecords;
+    
+    if (recordsToExport.length === 0) {
+      toast({
+        title: "Sin datos",
+        description: "No hay registros para exportar en el rango seleccionado",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    // Detailed records sheet
+    const detailedData = recordsToExport.map(record => ({
+      'Cédula': record.employees?.cedula || 'N/A',
+      'Nombre': record.employees?.nombre || 'N/A',
+      'Área': record.employees?.area || 'N/A',
+      'Tipo': record.tipo,
+      'Tarea': record.tarea || 'N/A',
+      'Objetos Personales': record.objetos_personales?.join(', ') || 'Ninguno',
+      'Fecha y Hora': new Date(record.hora_registro).toLocaleString('es-CO')
+    }));
+
+    // Summary sheet
+    const currentMetrics = (startDate || endDate) ? getFilteredMetrics() : metrics;
+    const summaryData = currentMetrics.map(m => ({
+      'Cédula': m.cedula,
+      'Nombre': m.nombre,
+      'Área': m.area,
+      'Total Entradas': m.entradas,
+      'Total Salidas': m.salidas,
+      'Total Movimientos': m.totalMovimientos,
+      'Último Movimiento': new Date(m.ultimoMovimiento).toLocaleString('es-CO')
+    }));
+
+    const wb = XLSX.utils.book_new();
+    
+    const wsDetailed = XLSX.utils.json_to_sheet(detailedData);
+    XLSX.utils.book_append_sheet(wb, wsDetailed, 'Registros Detallados');
+    
+    const wsSummary = XLSX.utils.json_to_sheet(summaryData);
+    XLSX.utils.book_append_sheet(wb, wsSummary, 'Resumen por Empleado');
+
+    const dateRange = startDate || endDate 
+      ? `_${startDate || 'inicio'}_a_${endDate || 'fin'}` 
+      : '_completo';
+    
+    XLSX.writeFile(wb, `Metricas_Bodega${dateRange}.xlsx`);
+    
+    toast({
+      title: "Exportación exitosa",
+      description: "El archivo Excel ha sido descargado"
+    });
+  };
+
+  const sortedMetrics = [...displayMetrics].sort((a, b) => {
     let valueA: number, valueB: number;
     
     switch (sortBy) {
@@ -126,14 +298,14 @@ export function MetricsPanel() {
     }
   };
 
-  const totalEntradas = metrics.reduce((sum, m) => sum + m.entradas, 0);
-  const totalSalidas = metrics.reduce((sum, m) => sum + m.salidas, 0);
-  const totalEmpleados = metrics.length;
+  const totalEntradas = displayMetrics.reduce((sum, m) => sum + m.entradas, 0);
+  const totalSalidas = displayMetrics.reduce((sum, m) => sum + m.salidas, 0);
+  const totalEmpleados = displayMetrics.length;
   const promedioMovimientos = totalEmpleados > 0 ? ((totalEntradas + totalSalidas) / totalEmpleados).toFixed(1) : '0';
 
   // Get top 5 with most entries and exits
-  const top5Entradas = [...metrics].sort((a, b) => b.entradas - a.entradas).slice(0, 5);
-  const top5Salidas = [...metrics].sort((a, b) => b.salidas - a.salidas).slice(0, 5);
+  const top5Entradas = [...displayMetrics].sort((a, b) => b.entradas - a.entradas).slice(0, 5);
+  const top5Salidas = [...displayMetrics].sort((a, b) => b.salidas - a.salidas).slice(0, 5);
 
   if (!isAuthenticated) {
     return (
@@ -194,6 +366,87 @@ export function MetricsPanel() {
 
   return (
     <div className="space-y-6 animate-fade-in">
+      {/* Actions Bar */}
+      <Card>
+        <CardContent className="pt-6">
+          <div className="flex flex-col md:flex-row gap-4 items-end justify-between">
+            <div className="flex flex-col sm:flex-row gap-4 flex-1">
+              <div className="flex flex-col gap-2">
+                <Label htmlFor="start-date" className="text-sm flex items-center gap-1">
+                  <Calendar className="w-4 h-4" />
+                  Fecha Inicio
+                </Label>
+                <Input
+                  id="start-date"
+                  type="date"
+                  value={startDate}
+                  onChange={(e) => setStartDate(e.target.value)}
+                  className="w-full sm:w-auto"
+                />
+              </div>
+              <div className="flex flex-col gap-2">
+                <Label htmlFor="end-date" className="text-sm flex items-center gap-1">
+                  <Calendar className="w-4 h-4" />
+                  Fecha Fin
+                </Label>
+                <Input
+                  id="end-date"
+                  type="date"
+                  value={endDate}
+                  onChange={(e) => setEndDate(e.target.value)}
+                  className="w-full sm:w-auto"
+                />
+              </div>
+              {(startDate || endDate) && (
+                <Button 
+                  variant="outline" 
+                  onClick={() => { setStartDate(''); setEndDate(''); }}
+                  className="self-end"
+                >
+                  Limpiar Filtros
+                </Button>
+              )}
+            </div>
+            <div className="flex gap-2">
+              <Button onClick={handleExportExcel} className="bg-green-600 hover:bg-green-700">
+                <FileSpreadsheet className="w-4 h-4 mr-2" />
+                Exportar Excel
+              </Button>
+              <AlertDialog>
+                <AlertDialogTrigger asChild>
+                  <Button variant="destructive" disabled={isDeleting}>
+                    <Trash2 className="w-4 h-4 mr-2" />
+                    Borrar Métricas
+                  </Button>
+                </AlertDialogTrigger>
+                <AlertDialogContent>
+                  <AlertDialogHeader>
+                    <AlertDialogTitle>¿Eliminar todas las métricas?</AlertDialogTitle>
+                    <AlertDialogDescription>
+                      Esta acción eliminará permanentemente todos los registros de entrada y salida. 
+                      Esta acción no se puede deshacer.
+                    </AlertDialogDescription>
+                  </AlertDialogHeader>
+                  <AlertDialogFooter>
+                    <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                    <AlertDialogAction onClick={handleDeleteMetrics} className="bg-destructive text-destructive-foreground">
+                      Eliminar Todo
+                    </AlertDialogAction>
+                  </AlertDialogFooter>
+                </AlertDialogContent>
+              </AlertDialog>
+            </div>
+          </div>
+          {(startDate || endDate) && (
+            <p className="text-sm text-muted-foreground mt-3">
+              Mostrando {filteredRecords.length} registros 
+              {startDate && ` desde ${new Date(startDate).toLocaleDateString('es-CO')}`}
+              {endDate && ` hasta ${new Date(endDate).toLocaleDateString('es-CO')}`}
+            </p>
+          )}
+        </CardContent>
+      </Card>
+
       {/* Summary Cards */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
         <Card className="bg-gradient-to-br from-blue-50 to-blue-100 dark:from-blue-950/30 dark:to-blue-900/20 border-blue-200 dark:border-blue-800">
