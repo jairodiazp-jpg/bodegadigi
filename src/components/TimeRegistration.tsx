@@ -29,6 +29,8 @@ const TAREAS = [
   'COORDINADOR',
   'JEFE DE TIENDA',
   'PERSONAL SST',
+  'SEGURIDAD',
+  'CAJEROS',
 ];
 
 export function TimeRegistration() {
