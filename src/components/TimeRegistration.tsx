@@ -233,9 +233,12 @@ export function TimeRegistration() {
     const fechaActual = new Date().toLocaleDateString('es-CO').replace(/\//g, '-');
     XLSX.writeFile(wb, `Reporte_Bodega_${fechaActual}.xlsx`);
 
+    // Clear all records after export
+    await clearAllRecords();
+
     toast({
       title: "Éxito",
-      description: "Reporte Excel generado correctamente"
+      description: "Reporte Excel generado y registros borrados"
     });
   };
 
